@@ -1,0 +1,88 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Result</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="page-loader visible" id="pageLoader" aria-hidden="false">
+    <div class="loader-panel">
+        <div class="loader-orb"></div>
+        <p id="loaderText">Preparing your analysis...</p>
+    </div>
+</div>
+
+<div class="container">
+    <h1>Analysis Result</h1>
+    <p class="page-subtitle">Your extracted insights, missing skills, and roadmap are shown below in the same flow with a cleaner, more readable presentation.</p>
+
+    <div class="card notice-card" id="noticeCard" style="display:none;">
+        <p id="noticeText"></p>
+    </div>
+
+    <div class="card">
+        <pre id="result"></pre>
+    </div>
+
+    <a href="index.html">Back</a>
+</div>
+
+<script>
+const loader = document.getElementById("pageLoader");
+const raw = localStorage.getItem("result");
+const uploadNotice = localStorage.getItem("uploadNotice");
+
+function formatResult(text) {
+    if (!text) return "No result";
+
+    return text
+        .replace(/Target Role:/g, "<h3>🎯 Target Role</h3>")
+        .replace(/Current Skills:\s*(.*)/g, (match, skills) => {
+            let formatted = skills.split(",").map(s =>
+                `<span class="skill">${s.trim()}</span>`
+            ).join(" ");
+            return "<h3>💡 Current Skills</h3>" + formatted;
+        })
+        .replace(/Missing Skills:/g, "<h3 style='color:#ff6b6b;'>🚨 Missing Skills</h3>")
+        .replace(/Roadmap:/g, "<h3>🛣️ Roadmap</h3>")
+        .replace(/\n/g, "<br>");
+}
+
+let parsed = null;
+try {
+    parsed = raw ? JSON.parse(raw) : null;
+} catch (error) {
+    parsed = raw ? { analysis: raw } : null;
+}
+
+const notices = [];
+if (uploadNotice) {
+    notices.push(uploadNotice);
+}
+if (parsed && parsed.source === "fallback") {
+    notices.push("Gemini quota exceeded, showing fallback result.");
+}
+if (parsed && parsed.cached) {
+    notices.push("Cached analysis used to avoid a repeated Gemini call.");
+}
+
+if (notices.length) {
+    document.getElementById("noticeCard").style.display = "block";
+    document.getElementById("noticeText").innerText = notices.join(" ");
+}
+
+document.getElementById("result").innerHTML = formatResult(parsed ? parsed.analysis : raw);
+if (loader) {
+    loader.classList.remove("visible");
+    loader.setAttribute("aria-hidden", "true");
+}
+</script>
+
+</body>
+</html>
