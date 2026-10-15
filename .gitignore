@@ -12,6 +12,11 @@ backend/venv/
 .env
 *.env
 backend/.env
+terraform.tfstate
+terraform.tfstate.*
+.terraform/
+terraform/terraform.tfvars
+backend/skillsync.db
 
 # OS and editor files
 .DS_Store

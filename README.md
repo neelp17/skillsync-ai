@@ -1,167 +1,66 @@
 # SkillSync AI
 
-SkillSync AI is an AI-powered skill gap analyzer that helps users upload a resume, extract technical skills, and generate a roadmap for a target role.
-
-The project currently uses a static frontend built with HTML, CSS, and JavaScript, and a Python FastAPI backend connected to the Gemini API.
+SkillSync AI is a resume skill analyzer and personalized roadmap generator. The repository contains a static HTML/CSS/JavaScript frontend, a FastAPI backend, Gemini-powered analysis with a fallback, and PostgreSQL persistence for saved analyses.
 
 ## Features
 
-- Upload a resume PDF
-- Extract technical skills from the resume
-- Enter a target role
-- Generate an AI-based roadmap for the selected role
-- Fallback skill extraction and analysis when Gemini is unavailable
-- Simple, clean frontend flow for upload and result viewing
+- Upload a PDF resume and extract skills.
+- Generate a skill gap analysis and roadmap for a target role.
+- Save analyses in PostgreSQL and list, view, update, or delete history.
+- Run locally with Docker Compose or run the API directly with SQLite for development.
+- Provision a single EC2 host with Terraform and deploy on pushes to `main` with GitHub Actions.
 
-## Tech Stack
+## Run locally with Docker
 
-### Frontend
+1. Install Docker Desktop / Docker Engine with the Compose plugin.
+2. Copy `.env.example` to `.env`, set a strong `POSTGRES_PASSWORD`, and set a newly rotated `GEMINI_API_KEY`.
+3. Run `docker compose up --build`.
+4. Open `http://localhost`.
 
-- HTML
-- CSS
-- JavaScript
+The API is available through the frontend proxy at `/api`; the backend itself is not exposed to the public host port. PostgreSQL data is stored in the `postgres_data` Docker volume.
 
-### Backend
+## Run the backend without Docker
 
-- Python
-- FastAPI
-- httpx
-- pdfplumber
-- python-dotenv
-
-### AI
-
-- Gemini API
-
-## Project Structure
-
-```text
-SkillSync AI/
-├── backend/
-│   ├── .env.example
-│   ├── check_models.py
-│   ├── config.py
-│   ├── main.py
-│   ├── requirements.txt
-│   ├── routes/
-│   │   ├── __init__.py
-│   │   └── analyzer.py
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── ai_service.py
-│   │   └── resume_parser.py
-│   └── utils/
-│       └── __init__.py
-├── frontend/
-│   ├── assets/
-│   ├── css/
-│   │   └── style.css
-│   ├── js/
-│   │   └── app.js
-│   ├── dashboard.html
-│   └── index.html
-└── README.md
-```
-
-## How It Works
-
-1. The user uploads a resume from the frontend.
-2. The FastAPI backend extracts text from the PDF.
-3. The backend sends the content to Gemini for skill extraction.
-4. The user enters a target role.
-5. The backend generates a roadmap and returns it to the frontend.
-6. The frontend displays the result on the dashboard page.
-
-## Local Setup
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/neelp17/skillsync-ai.git
-cd skillsync-ai
-```
-
-### 2. Set up the backend
-
-```bash
+```powershell
 cd backend
 python -m venv venv
-venv\Scripts\activate
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-
-### 3. Create environment file
-
-Create a file named `.env` inside the `backend/` folder and add:
-
-```env
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-2.5-flash-lite
-```
-
-### 4. Run the FastAPI backend
-
-```bash
+Copy-Item .env.example .env
 uvicorn main:app --reload
 ```
 
-Backend runs at:
+The API defaults to a local SQLite file at `backend/skillsync.db`. Set `GEMINI_API_KEY` in `backend/.env` to enable Gemini; fallback analysis still works without it. Serve the `frontend/` directory with a local static server and change `frontend/config.js` to `http://127.0.0.1:8000` for direct API calls.
 
-```text
-http://127.0.0.1:8000
-```
+## API
 
-### 5. Run the frontend
+- `GET /` health response
+- `POST /upload` multipart PDF upload
+- `POST /analyze` legacy non-persistent analysis endpoint
+- `POST /analyses` generate and persist an analysis (JSON: `role`, `skills`)
+- `GET /analyses` list the caller's saved history
+- `GET /analyses/{id}` read one saved analysis
+- `PATCH /analyses/{id}` update role and/or skills and regenerate the roadmap
+- `DELETE /analyses/{id}` delete an analysis
 
-Open `frontend/index.html` in your browser.
+The browser sends a stable UUID in `X-User-Id` to associate saved records with that browser profile. This is a portfolio/demo identity mechanism, **not authentication**: anyone able to set the header can impersonate an owner. Add real user authentication before using this with sensitive or public user data.
 
-Note: the frontend currently calls the backend at:
+## AWS EC2 deployment
 
-```text
-http://127.0.0.1:8000
-```
+Terraform provisions an Ubuntu EC2 instance, an encrypted root volume, and a security group allowing HTTP plus SSH from the CIDR you specify. PostgreSQL runs as a Compose service on that host with a persistent Docker volume.
 
-## API Endpoints
+1. Create/select an AWS account, a default VPC, and an EC2 key pair.
+2. From `terraform/`, copy `terraform.tfvars.example` to `terraform.tfvars`; set your SSH public IP as `/32` and your key pair name.
+3. Run `terraform init`, review `terraform plan`, then `terraform apply`. Save the `public_ip` output.
+4. In GitHub repository settings, add variable `EC2_HOST` with that IP and secrets `EC2_SSH_PRIVATE_KEY`, `POSTGRES_PASSWORD`, and the **rotated** `GEMINI_API_KEY`.
+5. Push to `main`. The workflow runs Python checks and container builds, then copies the project to EC2 and runs `docker compose up -d --build`.
 
-### `GET /`
+The deploy job is skipped if `EC2_HOST` is unset. Terraform state is local by default; keep it private and back it up securely. This setup serves HTTP only; add a domain and HTTPS termination before using it for real users. The AWS resources incur charges while running; `terraform destroy` removes the instance and its attached database volume.
 
-Health check endpoint.
+## CI
 
-### `POST /upload`
+GitHub Actions runs on pull requests and pushes to `main`: Python bytecode compilation, API CRUD tests, and frontend/backend image builds. Deployment runs after verification only for `main` pushes when the `EC2_HOST` repository variable is configured.
 
-Uploads a resume PDF and extracts skills.
+## Secrets and archive hygiene
 
-### `POST /analyze`
-
-Accepts user skills and a target role, then returns an AI-generated roadmap.
-
-## Current Limitations
-
-- No database yet
-- No user login system yet
-- Results are stored in browser local storage on the frontend
-- Frontend is currently configured for local backend URL
-
-## Planned Enhancements
-
-- Save analysis history using a database
-- Add email or user-based roadmap management
-- Add single active roadmap workflow
-- Dockerize the backend
-- Deploy frontend and backend on AWS
-- Add Terraform for infrastructure provisioning
-- Add CI/CD with GitHub Actions
-
-## Cloud and DevOps Direction
-
-This project is being prepared as a cloud/devops-focused portfolio project. The planned deployment path is:
-
-- Frontend on AWS S3 + CloudFront
-- Backend on AWS App Runner or ECS Fargate
-- Secrets managed through environment variables or AWS Secrets Manager
-- Infrastructure managed using Terraform
-- CI/CD using GitHub Actions
-
-## Author
-
-Neel V Padmawar
+Never commit `.env`, Terraform state, private keys, or API credentials. The supplied project ZIP contains `backend/.env`; treat its Gemini key as exposed and revoke/rotate it before pushing or deploying. Create a clean source archive without `.git`, virtual environments, or `.env` files.
